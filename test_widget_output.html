@@ -192,7 +192,8 @@
   </div>
 
   <script>
-    const sampleData = {
+    const sampleData = {"summary": {"total_pairs": 3, "passing_pairs": 2, "failing_pairs": 1, "detected_texts": 3}, "color_pairs": [{"id": "pair-0", "text": "Color Pair 1", "background": "#ffffff", "foreground": "#767676", "contrast_ratio": 4.54, "wcag_aa": {"normal_text": true, "large_text": true}, "wcag_aaa": {"normal_text": false, "large_text": false}, "status": "pass", "suggestions": []}, {"id": "pair-1", "text": "Color Pair 2", "background": "#000000", "foreground": "#ffffff", "contrast_ratio": 21.0, "wcag_aa": {"normal_text": true, "large_text": true}, "wcag_aaa": {"normal_text": true, "large_text": true}, "status": "pass", "suggestions": []}, {"id": "pair-2", "text": "Color Pair 3", "background": "#ff6b6b", "foreground": "#ffe66d", "contrast_ratio": 2.22, "wcag_aa": {"normal_text": false, "large_text": false}, "wcag_aaa": {"normal_text": false, "large_text": false}, "status": "fail", "suggestions": []}]}; 
+ const _ignored = {
       summary: { total_pairs: 0, passing_pairs: 0, failing_pairs: 0, detected_texts: 0 },
       color_pairs: []
     };
