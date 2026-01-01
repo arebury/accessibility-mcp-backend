@@ -67,10 +67,10 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# Root endpoint
+# Root endpoint - GET for info
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Root endpoint - info"""
     return {
         "status": "ok",
         "service": "Color Accessibility MCP Server",
@@ -83,6 +83,47 @@ async def root():
             "health": "/health (GET) - Health check"
         }
     }
+
+
+# Root endpoint - POST for Apps discovery
+@app.post("/")
+async def root_post(request: Request):
+    """Root endpoint - handles Apps initial request"""
+    try:
+        body = await request.json()
+        method = body.get("method")
+        request_id = body.get("id")
+        
+        # Redirect to SSE endpoint info
+        if method == "initialize" or not method:
+            return JSONResponse(content={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "Color Accessibility MCP Server",
+                        "version": "1.0.0"
+                    }
+                }
+            })
+        else:
+            # Redirect other methods to /mcp
+            return JSONResponse(content={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Please use /mcp endpoint for method: {method}"
+                }
+            })
+    except:
+        # If not JSON-RPC, return info
+        return {"message": "Use /mcp/sse for SSE connection"}
+
 
 
 # Health check endpoint
