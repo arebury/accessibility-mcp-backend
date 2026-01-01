@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+EOFcat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log

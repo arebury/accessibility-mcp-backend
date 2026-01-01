@@ -1,0 +1,19 @@
+{
+    "color_pairs": [
+        {
+            "background": "#FFFFFF",
+            "foreground": "#767676",
+            "text_size": "normal"
+        },
+        {
+            "background": "#000000",
+            "foreground": "#FFFFFF",
+            "text_size": "large"
+        },
+        {
+            "background": "#FF6B6B",
+            "foreground": "#FFE66D",
+            "text_size": "normal"
+        }
+    ]
+}
