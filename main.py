@@ -165,13 +165,6 @@ async def mcp_endpoint(request: Request):
                                     }
                                 },
                                 "required": ["color_pairs"]
-                            },
-                            # CRITICAL: Tell ChatGPT to render HTML widget
-                            "annotations": {
-                                "readOnlyHint": True
-                            },
-                            "_meta": {
-                                "openai/outputTemplate": "html"
                             }
                         }
                     ]
