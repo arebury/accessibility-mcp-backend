@@ -250,7 +250,7 @@ async def handle_tool_call_sync(request_id: Optional[Union[str, int]], params: O
                         "type": "resource",
                         "resource": {
                             "uri": "ui://widget/color-accessibility.html",
-                            "mimeType": "text/html",
+                            "mimeType": "text/html+skybridge",
                             "text": html_widget
                         }
                     }
@@ -491,7 +491,7 @@ async def handle_tool_call(request_id: Optional[Union[str, int]], params: Option
                         "type": "resource",
                         "resource": {
                             "uri": "ui://widget/color-accessibility.html",
-                            "mimeType": "text/html",
+                            "mimeType": "text/html+skybridge",
                             "text": html_widget
                         }
                     }
