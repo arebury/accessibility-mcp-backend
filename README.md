@@ -1,13 +1,17 @@
 # WCAG Color Accessibility MCP Server
 
-A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color accessibility from ChatGPT Vision. Uses the `coloraide` library for accurate WCAG 2.1 contrast calculations and generates beautiful, embeddable HTML widgets with analysis results and automatic color suggestions.
+A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color accessibility from ChatGPT Vision. Provides real-time color contrast analysis, WCAG compliance checking, and beautiful interactive HTML widgets.
+
+## Author
+
+**Rafael Areses Delgado-Brackenbury** ([@arebury](https://github.com/arebury))
 
 ## Features
 
 ✨ **Complete WCAG 2.1 Analysis**
-- Accurate contrast ratio calculations using coloraide
+- Accurate contrast ratio calculations
 - Support for both normal and large text sizes
-- AAA and AA compliance level detection
+- AA and AAA compliance level detection
 
 🎨 **Automatic Color Suggestions**
 - Smart color adjustments for failed pairs
@@ -15,7 +19,7 @@ A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color acc
 - Before/after preview comparisons
 
 📊 **Visual HTML Widgets**
-- Beautiful, responsive design with Tailwind CSS
+- Beautiful, responsive design
 - Summary statistics dashboard
 - Detailed per-pair analysis with visual previews
 - Embeds directly in ChatGPT conversations
@@ -30,9 +34,9 @@ A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color acc
 
 ```
 .
-├── main.py              # FastAPI server with MCP endpoint
-├── color_analyzer.py    # WCAG analysis logic using coloraide
-├── widget_generator.py  # Generates visual HTML widget
+├── main.py              # FastAPI MCP server
+├── web/
+│   └── ui-template.html # HTML widget template
 ├── requirements.txt     # Python dependencies
 ├── render.yaml          # Render.com deployment config
 ├── .gitignore          # Git ignore patterns
@@ -41,7 +45,7 @@ A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color acc
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.9 or higher
 - pip (Python package manager)
 
 ## Installation
@@ -50,7 +54,7 @@ A FastAPI-based Model Context Protocol (MCP) server that analyzes WCAG color acc
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/arebury/accessibility-mcp-backend.git
    cd accessibility-mcp-backend
    ```
 
@@ -104,8 +108,8 @@ Returns available tools.
   "result": {
     "tools": [
       {
-        "name": "analyze_accessibility",
-        "description": "Analyze WCAG color accessibility...",
+        "name": "analyze_color_accessibility",
+        "description": "Analyze WCAG color accessibility from images",
         "inputSchema": { ... }
       }
     ]
@@ -115,7 +119,7 @@ Returns available tools.
 
 #### Method: `tools/call`
 
-Executes the `analyze_accessibility` tool.
+Executes the `analyze_color_accessibility` tool.
 
 **Request:**
 ```json
@@ -124,20 +128,10 @@ Executes the `analyze_accessibility` tool.
   "id": 2,
   "method": "tools/call",
   "params": {
-    "name": "analyze_accessibility",
+    "name": "analyze_color_accessibility",
     "arguments": {
-      "color_pairs": [
-        {
-          "background": "#FFFFFF",
-          "foreground": "#767676",
-          "text_size": "normal"
-        },
-        {
-          "background": "#000000",
-          "foreground": "#FFFFFF",
-          "text_size": "large"
-        }
-      ]
+      "image_url": "https://example.com/image.png",
+      "wcag_level": "AA"
     }
   }
 }
@@ -152,32 +146,20 @@ Executes the `analyze_accessibility` tool.
     "content": [
       {
         "type": "text",
-        "text": "<html>...</html>",
-        "mimeType": "text/html"
+        "text": "{...analysis results...}"
+      },
+      {
+        "type": "resource",
+        "resource": {
+          "uri": "ui://widget/color-accessibility.html",
+          "mimeType": "text/html",
+          "text": "<html>...widget...</html>"
+        }
       }
     ]
   }
 }
 ```
-
-### Direct Analysis Endpoint: `POST /analyze`
-
-Test endpoint that returns HTML widget directly (bypasses JSON-RPC).
-
-**Request:**
-```json
-{
-  "color_pairs": [
-    {
-      "background": "#FFFFFF",
-      "foreground": "#767676",
-      "text_size": "normal"
-    }
-  ]
-}
-```
-
-**Response:** HTML widget (Content-Type: text/html)
 
 ### Health Check: `GET /health`
 
@@ -201,21 +183,37 @@ The analyzer follows WCAG 2.1 Level AA/AAA standards:
 
 ## Usage with ChatGPT
 
+### Option 1: Developer Mode (Recommended)
+
 1. **Deploy to Render.com** (see deployment section below)
 
-2. **Add as ChatGPT Action**
-   - Go to ChatGPT Settings → Actions
-   - Add new action with your deployed URL
-   - Import the schema from `/openapi.json`
+2. **Enable Developer Mode in ChatGPT**
+   - Settings → Apps → Advanced → Enable "Developer mode"
+
+3. **Create App**
+   - Settings → Apps → Create app
+   - URL: `https://accessibility-mcp-backend.onrender.com`
+   - Authentication: None
+
+4. **Use in ChatGPT**
+   ```
+   Analyze the color accessibility of this image
+   (attach screenshot)
+   ```
+
+   ChatGPT will extract colors and display an interactive widget!
+
+### Option 2: Custom Connectors
+
+1. **Deploy to Render.com**
+
+2. **Add Connector**
+   - Settings → Connectors → Add connector
+   - URL: `https://accessibility-mcp-backend.onrender.com/mcp`
+   - Authentication: None
 
 3. **Use in ChatGPT**
-   ```
-   Analyze the color accessibility of:
-   - White background (#FFFFFF) with gray text (#767676)
-   - Black background (#000000) with white text (#FFFFFF)
-   ```
-
-   ChatGPT will use Vision to extract colors and call your MCP server to display the widget!
+   - Same as above
 
 ## Deployment to Render.com
 
@@ -224,7 +222,7 @@ The analyzer follows WCAG 2.1 Level AA/AAA standards:
    git init
    git add .
    git commit -m "Initial commit"
-   git remote add origin <your-repo-url>
+   git remote add origin https://github.com/arebury/accessibility-mcp-backend.git
    git push -u origin main
    ```
 
@@ -236,20 +234,10 @@ The analyzer follows WCAG 2.1 Level AA/AAA standards:
    - Click "Create Web Service"
 
 3. **Get your URL**
-   - After deployment, you'll get a URL like: `https://wcag-accessibility-mcp.onrender.com`
-   - Use this URL in your ChatGPT Action configuration
+   - After deployment, you'll get a URL like: `https://accessibility-mcp-backend.onrender.com`
+   - Use this URL in your ChatGPT configuration
 
 ## Development
-
-### Running Tests
-
-```bash
-# Install dev dependencies
-pip install pytest httpx
-
-# Run tests
-pytest
-```
 
 ### Interactive API Documentation
 
@@ -257,36 +245,50 @@ When running locally, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
-### Example cURL Request
+### Example Test
 
 ```bash
-curl -X POST http://localhost:8000/analyze \
+curl -X POST http://localhost:8000/mcp \
   -H "Content-Type: application/json" \
   -d '{
-    "color_pairs": [
-      {
-        "background": "#FFFFFF",
-        "foreground": "#767676",
-        "text_size": "normal"
-      }
-    ]
-  }' > output.html
-
-# Open the generated widget
-open output.html
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list"
+  }' | python -m json.tool
 ```
 
 ## Technology Stack
 
 - **FastAPI**: Modern, fast web framework for building APIs
-- **coloraide**: Advanced color science library with WCAG 2.1 support
+- **Pillow (PIL)**: Image processing for color extraction
+- **pytesseract**: OCR for text detection in images
+- **NumPy**: Numerical computations
 - **Pydantic**: Data validation using Python type annotations
 - **Uvicorn**: Lightning-fast ASGI server
-- **Tailwind CSS**: Utility-first CSS framework (via CDN in widget)
 
 ## License
 
-MIT License - feel free to use this in your projects!
+MIT License
+
+Copyright (c) 2026 Rafael Areses Delgado-Brackenbury
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Contributing
 
@@ -294,4 +296,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For issues or questions, please open an issue on GitHub.
+For issues or questions, please open an issue on [GitHub](https://github.com/arebury/accessibility-mcp-backend/issues).
+
+---
+
+Created by **Rafael Areses Delgado-Brackenbury** ([@arebury](https://github.com/arebury))
