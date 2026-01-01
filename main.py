@@ -65,15 +65,7 @@ async def root():
         "service": "Color Accessibility MCP Server",
         "version": "1.0.0"
     }
-    
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "status": "ok",
-        "service": "Color Accessibility MCP Server",
-        "version": "1.0.0"
-    }
+
 
 # Health check endpoint
 @app.get("/health")
@@ -89,6 +81,7 @@ async def mcp_endpoint(request: Request):
     Main MCP endpoint implementing JSON-RPC 2.0 protocol
     
     Supported methods:
+    - initialize: Initialize MCP connection
     - tools/list: Returns available tools
     - tools/call: Executes the analyze_accessibility tool
     """
@@ -96,6 +89,22 @@ async def mcp_endpoint(request: Request):
         # Parse JSON-RPC request
         body = await request.json()
         rpc_request = JSONRPCRequest(**body)
+        
+        # Handle initialize method (REQUIRED for MCP)
+        if rpc_request.method == "initialize":
+            return JSONRPCResponse(
+                id=rpc_request.id,
+                result={
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "Color Accessibility MCP Server",
+                        "version": "1.0.0"
+                    }
+                }
+            ).model_dump()
         
         # Handle different methods
         if rpc_request.method == "tools/list":
