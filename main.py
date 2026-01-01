@@ -1,14 +1,17 @@
 """
-FastAPI MCP Server for WCAG Color Accessibility Analysis
-Implements JSON-RPC 2.0 protocol for ChatGPT integration
+FastAPI MCP Server with SSE Transport for ChatGPT
+Implements Server-Sent Events to match Cristina's Node.js implementation
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Union
 import json
+import asyncio
+import uuid
+from datetime import datetime
 
 from color_analyzer import analyze_accessibility
 from widget_generator import generate_widget
@@ -42,18 +45,26 @@ class AnalyzeAccessibilityInput(BaseModel):
     color_pairs: List[ColorPair] = Field(..., description="Array of color pairs to analyze")
 
 
-class JSONRPCRequest(BaseModel):
-    jsonrpc: str = Field(default="2.0", description="JSON-RPC version")
-    id: Optional[Union[str, int]] = Field(default=None, description="Request ID")
-    method: str = Field(..., description="Method name")
-    params: Optional[Dict[str, Any]] = Field(default=None, description="Method parameters")
+# Store for SSE connections
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, asyncio.Queue] = {}
+    
+    async def connect(self, connection_id: str) -> asyncio.Queue:
+        queue = asyncio.Queue()
+        self.active_connections[connection_id] = queue
+        return queue
+    
+    def disconnect(self, connection_id: str):
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+    
+    async def send_message(self, connection_id: str, message: dict):
+        if connection_id in self.active_connections:
+            await self.active_connections[connection_id].put(message)
 
 
-class JSONRPCResponse(BaseModel):
-    jsonrpc: str = Field(default="2.0")
-    id: Optional[Union[str, int]] = Field(default=None)
-    result: Optional[Any] = Field(default=None)
-    error: Optional[Dict[str, Any]] = Field(default=None)
+manager = ConnectionManager()
 
 
 # Root endpoint
@@ -63,7 +74,12 @@ async def root():
     return {
         "status": "ok",
         "service": "Color Accessibility MCP Server",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "endpoints": {
+            "sse": "/mcp/sse",
+            "messages": "/mcp/messages",
+            "health": "/health"
+        }
     }
 
 
@@ -74,27 +90,78 @@ async def health_check():
     return {"status": "healthy", "service": "wcag-accessibility-mcp"}
 
 
-# Main MCP endpoint
-@app.post("/mcp")
-async def mcp_endpoint(request: Request):
+# SSE endpoint for ChatGPT
+@app.get("/mcp/sse")
+async def mcp_sse(request: Request):
     """
-    Main MCP endpoint implementing JSON-RPC 2.0 protocol
+    Server-Sent Events endpoint for MCP protocol
+    ChatGPT connects here to receive responses
+    """
+    connection_id = str(uuid.uuid4())
+    queue = await manager.connect(connection_id)
     
-    Supported methods:
-    - initialize: Initialize MCP connection
-    - tools/list: Returns available tools
-    - tools/call: Executes the analyze_accessibility tool
+    async def event_generator():
+        try:
+            # Send initial connection event
+            yield f"event: endpoint\ndata: /mcp/messages\n\n"
+            
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait for messages with timeout
+                    message = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    
+                    # Send message as SSE event
+                    data = json.dumps(message)
+                    yield f"event: message\ndata: {data}\n\n"
+                    
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield f": keepalive\n\n"
+                    continue
+                    
+        finally:
+            manager.disconnect(connection_id)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+# Messages endpoint for ChatGPT to send requests
+@app.post("/mcp/messages")
+async def mcp_messages(request: Request):
+    """
+    POST endpoint for receiving messages from ChatGPT
+    Processes JSON-RPC requests and sends responses via SSE
     """
     try:
-        # Parse JSON-RPC request
         body = await request.json()
-        rpc_request = JSONRPCRequest(**body)
         
-        # Handle initialize method (REQUIRED for MCP)
-        if rpc_request.method == "initialize":
-            return JSONRPCResponse(
-                id=rpc_request.id,
-                result={
+        # Extract connection ID from headers or generate new one
+        connection_id = request.headers.get("X-Connection-Id", str(uuid.uuid4()))
+        
+        # Process JSON-RPC request
+        method = body.get("method")
+        request_id = body.get("id")
+        params = body.get("params")
+        
+        response = None
+        
+        if method == "initialize":
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {
                         "tools": {}
@@ -104,114 +171,118 @@ async def mcp_endpoint(request: Request):
                         "version": "1.0.0"
                     }
                 }
-            ).model_dump()
+            }
         
-        # Handle different methods
-        if rpc_request.method == "tools/list":
-            return handle_tools_list(rpc_request.id)
+        elif method == "tools/list":
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "analyze_accessibility",
+                            "description": "Analyze WCAG color accessibility for multiple color pairs. Returns a visual HTML widget with contrast ratios, WCAG levels, and suggestions for failed pairs.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "color_pairs": {
+                                        "type": "array",
+                                        "description": "Array of color pairs to analyze",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "background": {
+                                                    "type": "string",
+                                                    "description": "Background color (hex, rgb, or CSS format)"
+                                                },
+                                                "foreground": {
+                                                    "type": "string",
+                                                    "description": "Foreground/text color (hex, rgb, or CSS format)"
+                                                },
+                                                "text_size": {
+                                                    "type": "string",
+                                                    "description": "Text size: 'normal' or 'large'",
+                                                    "enum": ["normal", "large"],
+                                                    "default": "normal"
+                                                }
+                                            },
+                                            "required": ["background", "foreground"]
+                                        }
+                                    }
+                                },
+                                "required": ["color_pairs"]
+                            },
+                            # CRITICAL: Tell ChatGPT to render HTML widget
+                            "annotations": {
+                                "readOnlyHint": True
+                            },
+                            "_meta": {
+                                "openai/outputTemplate": "html"
+                            }
+                        }
+                    ]
+                }
+            }
         
-        elif rpc_request.method == "tools/call":
-            return await handle_tools_call(rpc_request.id, rpc_request.params)
+        elif method == "tools/call":
+            response = await handle_tool_call(request_id, params)
         
         else:
-            return JSONRPCResponse(
-                id=rpc_request.id,
-                error={
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
                     "code": -32601,
-                    "message": f"Method not found: {rpc_request.method}"
+                    "message": f"Method not found: {method}"
                 }
-            ).model_dump()
-    
+            }
+        
+        # Send response via SSE
+        if connection_id in manager.active_connections:
+            await manager.send_message(connection_id, response)
+        
+        # Also return response directly for synchronous clients
+        return JSONResponse(content=response)
+        
     except Exception as e:
-        return JSONRPCResponse(
-            id=None,
-            error={
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {
                 "code": -32700,
                 "message": f"Parse error: {str(e)}"
             }
-        ).model_dump()
-
-
-def handle_tools_list(request_id: Optional[Union[str, int]]) -> Dict[str, Any]:
-    """
-    Handle tools/list method
-    Returns the list of available tools
-    """
-    return JSONRPCResponse(
-        id=request_id,
-        result={
-            "tools": [
-                {
-                    "name": "analyze_accessibility",
-                    "description": "Analyze WCAG color accessibility for multiple color pairs. Returns a visual HTML widget with contrast ratios, WCAG levels, and suggestions for failed pairs.",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "color_pairs": {
-                                "type": "array",
-                                "description": "Array of color pairs to analyze",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "background": {
-                                            "type": "string",
-                                            "description": "Background color (hex, rgb, or CSS format)"
-                                        },
-                                        "foreground": {
-                                            "type": "string",
-                                            "description": "Foreground/text color (hex, rgb, or CSS format)"
-                                        },
-                                        "text_size": {
-                                            "type": "string",
-                                            "description": "Text size: 'normal' or 'large'",
-                                            "enum": ["normal", "large"],
-                                            "default": "normal"
-                                        }
-                                    },
-                                    "required": ["background", "foreground"]
-                                }
-                            }
-                        },
-                        "required": ["color_pairs"]
-                    },
-                    # CRITICAL: Tell ChatGPT to render HTML widget
-                    "annotations": {
-                        "readOnlyHint": True
-                    },
-                    "_meta": {
-                        "openai/outputTemplate": "html"
-                    }
-                }
-            ]
         }
-    ).model_dump()
+        return JSONResponse(content=error_response, status_code=500)
 
 
-async def handle_tools_call(request_id: Optional[Union[str, int]], params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+async def handle_tool_call(request_id: Optional[Union[str, int]], params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Handle tools/call method
     Executes the requested tool and returns results
     """
     if not params:
-        return JSONRPCResponse(
-            id=request_id,
-            error={
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {
                 "code": -32602,
                 "message": "Invalid params: params object is required"
             }
-        ).model_dump()
+        }
     
     tool_name = params.get("name")
     arguments = params.get("arguments", {})
     
     if tool_name != "analyze_accessibility":
-        return JSONRPCResponse(
-            id=request_id,
-            error={
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {
                 "code": -32602,
                 "message": f"Unknown tool: {tool_name}"
             }
-        ).model_dump()
+        }
     
     try:
         # Validate input
@@ -226,10 +297,11 @@ async def handle_tools_call(request_id: Optional[Union[str, int]], params: Optio
         # Generate HTML widget
         html_widget = generate_widget(analysis_results)
         
-        # Return result in MCP format
-        return JSONRPCResponse(
-            id=request_id,
-            result={
+        # Return result in MCP format (IDENTICAL to Node.js)
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
                 "content": [
                     {
                         "type": "text",
@@ -245,39 +317,17 @@ async def handle_tools_call(request_id: Optional[Union[str, int]], params: Optio
                     }
                 ]
             }
-        ).model_dump()
+        }
     
     except Exception as e:
-        return JSONRPCResponse(
-            id=request_id,
-            error={
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {
                 "code": -32603,
                 "message": f"Internal error: {str(e)}"
             }
-        ).model_dump()
-
-
-# Direct analysis endpoint (for testing/debugging)
-@app.post("/analyze", response_class=HTMLResponse)
-async def analyze_direct(input_data: AnalyzeAccessibilityInput):
-    """
-    Direct analysis endpoint that returns HTML widget
-    Useful for testing without JSON-RPC wrapper
-    """
-    try:
-        # Convert to dict format
-        color_pairs = [pair.model_dump() for pair in input_data.color_pairs]
-        
-        # Perform analysis
-        analysis_results = analyze_accessibility(color_pairs)
-        
-        # Generate and return HTML widget
-        html_widget = generate_widget(analysis_results)
-        
-        return HTMLResponse(content=html_widget)
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        }
 
 
 if __name__ == "__main__":
