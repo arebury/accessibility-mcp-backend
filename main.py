@@ -213,7 +213,7 @@ async def handle_tools_call(request_id: Optional[Union[str, int]], params: Optio
         # Convert to dict format for analyzer
         color_pairs = [pair.model_dump() for pair in input_data.color_pairs]
         
-        # Perform analysis
+      # Perform analysis
         analysis_results = analyze_accessibility(color_pairs)
         
         # Generate HTML widget
@@ -226,14 +226,22 @@ async def handle_tools_call(request_id: Optional[Union[str, int]], params: Optio
                 "content": [
                     {
                         "type": "text",
-                        "text": html_widget,
-                        "mimeType": "text/html"
+                        "text": json.dumps(analysis_results, indent=2)
+                    },
+                    {
+                        "type": "resource",
+                        "resource": {
+                            "uri": "ui://widget/color-accessibility.html",
+                            "mimeType": "text/html",
+                            "text": html_widget
+                        }
                     }
                 ]
             }
         ).model_dump()
     
     except Exception as e:
+        
         return JSONRPCResponse(
             id=request_id,
             error={
